@@ -36,7 +36,7 @@ http://localhost:8000
 3. **Test recognition**: Draw a digit and click "Test Recognition" to see if the neural network can recognize it.
 4. **Clear the canvas**: Click "Clear Canvas" to start over.
 
-![alt text](https://github.com/ndeskaj/simple_ocr/images/screenshot.png)
+![alt text](https://github.com/ndeskaj/simple_ocr/blob/main/images/screenshot.png)
 
 
 ## How It Works
