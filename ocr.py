@@ -35,6 +35,7 @@ class OCRNeuralNetwork:
                         for i in training_indices])
         else:
             self._load()
+            print("Neural network loaded from file.")
 
     # randomize the weights for each layer in the neural network
     def _rand_initialize_weights(self, size_in, size_out):
@@ -55,42 +56,122 @@ class OCRNeuralNetwork:
         plt.show()
 
     def train(self, training_data_array):
+        print(f"Training with {len(training_data_array)} samples...")
         for data in training_data_array:
-            if isinstance(data, tuple):
-                data = {"y0": data[0], "label": int(data[1])}  # Ensure label is an integer
+            try:
+                # Ensure data is in the right format
+                if isinstance(data, tuple):
+                    data = {"y0": data[0], "label": int(data[1])}
+                
+                # Ensure y0 is a list
+                if 'y0' not in data or not data['y0']:
+                    print(f"Warning: Missing or empty 'y0' in training data")
+                    continue
+                    
+                # Ensure label is an integer
+                if 'label' not in data:
+                    print(f"Warning: Missing 'label' in training data")
+                    continue
+                
+                label = data['label']
+                if isinstance(label, str):
+                    try:
+                        label = int(label)
+                    except ValueError:
+                        print(f"Warning: Label '{label}' is not a valid number")
+                        continue
+                
+                # Ensure label is in range 0-9
+                if not (0 <= label <= 9):
+                    print(f"Warning: Label {label} outside valid range 0-9")
+                    continue
+                    
+                # Ensure y0 is properly formatted
+                y0_data = data['y0']
+                if len(y0_data) != 400:
+                    print(f"Warning: Input data length {len(y0_data)} != 400")
+                    continue
+                
+                # Convert y0 to a proper matrix format - this is likely the issue
+                y0_matrix = np.asmatrix([float(val) for val in y0_data])
+                
+                # Forward propagation
+                y1 = np.dot(np.asmatrix(self.theta1), y0_matrix.T)
+                sum1 = y1 + np.asmatrix(self.input_layer_bias)  # add bias
+                y1 = self.sigmoid(sum1)
 
-            # Second step: forward propagation
-            y1 = np.dot(np.asmatrix(self.theta1), np.asmatrix(data["y0"]).T)
-            sum1 = y1 + np.asmatrix(self.input_layer_bias)  # add bias
-            y1 = self.sigmoid(sum1)
+                y2 = np.dot(np.array(self.theta2), y1)
+                y2 = y2 + np.array(self.hidden_layer_bias)
+                y2 = self.sigmoid(y2)
+
+                # Back propagation
+                actual_values = [0] * 10
+                actual_values[int(label)] = 1  # Use integer label as index
+                output_errors = np.asmatrix(actual_values).T - np.asmatrix(y2)
+                hidden_errors = np.multiply(np.dot(np.asmatrix(self.theta2).T, output_errors), self.sigmoid_prime(sum1))
+
+                # Update weights
+                self.theta1 += self.LEARNING_RATE * np.dot(hidden_errors, y0_matrix)
+                self.theta2 += self.LEARNING_RATE * np.dot(output_errors, np.asmatrix(y1).T)
+                self.hidden_layer_bias += self.LEARNING_RATE * output_errors
+                self.input_layer_bias += self.LEARNING_RATE * hidden_errors
+                
+                print(f"Successfully trained on digit {label}")
+            
+            except Exception as e:
+                print(f"Error training on sample: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                
+        print("Training complete.")
+
+    def predict_with_confidence(self, test):
+        """Returns confidence scores for all digits and the predicted digit"""
+        try:
+            # Convert input to appropriate format if needed
+            if isinstance(test, str):
+                test = [int(c) for c in test]
+                
+            # Validate input data
+            if len(test) != 400:
+                print(f"Warning: Input data length {len(test)} != 400")
+                return 9, {i: 0.0 for i in range(10)}  # Default to 9 with zero confidence
+                
+            # Convert to matrix format with proper float values
+            test_matrix = np.asmatrix([float(val) for val in test])
+            
+            # Forward propagation
+            y1 = np.dot(np.array(self.theta1), test_matrix.T)
+            y1 = y1 + np.asmatrix(self.input_layer_bias)
+            y1 = self.sigmoid(y1)
 
             y2 = np.dot(np.array(self.theta2), y1)
-            y2 = y2 + np.array(self.hidden_layer_bias)
+            y2 = np.add(y2, self.hidden_layer_bias)
             y2 = self.sigmoid(y2)
 
-            # Third step: back propagation
-            actual_values = [0] * 10
-            actual_values[data['label']] = 1  # Use integer label as index
-            output_errors = np.asmatrix(actual_values).T - np.asmatrix(y2)
-            hidden_errors = np.multiply(np.dot(np.asmatrix(self.theta2).T, output_errors), self.sigmoid_prime(sum1))
-
-            # Fourth step: update weights
-            self.theta1 += self.LEARNING_RATE * np.dot(hidden_errors, np.asmatrix(data['y0']))
-            self.theta2 += self.LEARNING_RATE * np.dot(output_errors, np.asmatrix(y1).T)
-            self.hidden_layer_bias += self.LEARNING_RATE * output_errors
-            self.input_layer_bias += self.LEARNING_RATE * hidden_errors
+            # Get confidence scores for all digits
+            results = y2.T.tolist()[0]
+            confidence_scores = {i: float(results[i]) for i in range(len(results))}
+            
+            # Print confidence scores for debugging
+            print("Confidence scores for each digit:")
+            for digit, confidence in confidence_scores.items():
+                print(f"Digit {digit}: {confidence:.6f}")
+            
+            # Return the digit with highest confidence
+            predicted_digit = results.index(max(results))
+            return predicted_digit, confidence_scores
+            
+        except Exception as e:
+            print(f"Error in prediction: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return 9, {i: 0.0 for i in range(10)}  # Default to 9 with zero confidence
 
     def predict(self, test):
-        y1 = np.dot(np.array(self.theta1), np.asmatrix(test).T)
-        y1 = y1 + np.asmatrix(self.input_layer_bias)
-        y1 = self.sigmoid(y1)
-
-        y2 = np.dot(np.array(self.theta2), y1)
-        y2 = np.add(y2, self.hidden_layer_bias)
-        y2 = self.sigmoid(y2)
-
-        results = y2.T.tolist()[0]
-        return results.index(max(results))
+        """Returns the predicted digit (for backward compatibility)"""
+        predicted_digit, _ = self.predict_with_confidence(test)
+        return predicted_digit
     
     def save(self):
         if not self._use_file:
@@ -104,14 +185,19 @@ class OCRNeuralNetwork:
         }
         with open(OCRNeuralNetwork.NN_FILE_PATH, 'w') as nnFile:
             json.dump(json_neural_network, nnFile)
+        print(f"Neural network saved to {OCRNeuralNetwork.NN_FILE_PATH}")
 
     def _load(self):
         if not self._use_file:
             return
         
-        with open(OCRNeuralNetwork.NN_FILE_PATH) as nnFile:
-            nn = json.load(nnFile)
-        self.theta1 = [np.array(li) for li in nn['theta1']]
-        self.theta2 = [np.array(li) for li in nn['theta2']]
-        self.input_layer_bias = np.array(nn['input_layer_bias'])
-        self.hidden_layer_bias = np.array(nn['hidden_layer_bias'])
+        try:
+            with open(OCRNeuralNetwork.NN_FILE_PATH) as nnFile:
+                nn = json.load(nnFile)
+            self.theta1 = [np.array(li) for li in nn['theta1']]
+            self.theta2 = [np.array(li) for li in nn['theta2']]
+            self.input_layer_bias = np.array(nn['input_layer_bias'])
+            self.hidden_layer_bias = np.array(nn['hidden_layer_bias'])
+        except Exception as e:
+            print(f"Error loading neural network: {str(e)}")
+            raise
